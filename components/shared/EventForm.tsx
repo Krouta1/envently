@@ -7,10 +7,8 @@ import { Button } from "@/components/ui/button";
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
-  FormLabel,
   FormMessage,
 } from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
@@ -23,6 +21,9 @@ import Image from "next/image";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import { Checkbox } from "../ui/checkbox";
+import { useUploadThing } from "@/lib/uploadthing";
+import { useRouter } from "next/navigation";
+import { createEvent } from "@/lib/actions/event.actions";
 
 type EventFormProps = {
   userId: string;
@@ -31,6 +32,9 @@ type EventFormProps = {
 
 const EventForm = ({ userId, type }: EventFormProps) => {
   const [files, setFiles] = useState<File[]>([]);
+  const { startUpload } = useUploadThing("imageUploader");
+  const router = useRouter();
+
   // 1. Define your form.
   const initialValues = eventDefaultValues;
   const form = useForm<z.infer<typeof eventFormSchema>>({
@@ -39,10 +43,38 @@ const EventForm = ({ userId, type }: EventFormProps) => {
   });
 
   // 2. Define a submit handler.
-  function onSubmit(values: z.infer<typeof eventFormSchema>) {
-    // Do something with the form values.
-    // ✅ This will be type-safe and validated.
-    console.log(values);
+  async function onSubmit(values: z.infer<typeof eventFormSchema>) {
+    let uploadedImageUrl = values.imageUrl;
+
+    //if i have some picture i need to upload it
+    if (files.length > 0) {
+      const uploadedImages = await startUpload(files);
+
+      if (!uploadedImages) return;
+
+      //now i add it to my values
+      uploadedImageUrl = uploadedImages[0].url;
+    }
+    // if i have create form
+    if (type === "Create") {
+      try {
+        const newEvent = await createEvent({
+          event: {
+            ...values,
+            imageUrl: uploadedImageUrl,
+          },
+          userId,
+          path: "/profile",
+        });
+
+        if (newEvent) {
+          form.reset();
+          router.push(`/events/${newEvent._id}`);
+        }
+      } catch (error) {
+        console.log(error);
+      }
+    }
   }
   return (
     <Form {...form}>
@@ -260,7 +292,7 @@ const EventForm = ({ userId, type }: EventFormProps) => {
               </FormItem>
             )}
           />
-  <FormField
+          <FormField
             control={form.control}
             name="url"
             render={({ field }) => (
@@ -286,8 +318,13 @@ const EventForm = ({ userId, type }: EventFormProps) => {
           />
         </div>
 
-        <Button type="submit" size={"lg"} disabled={form.formState.isSubmitting} className="button col-span-2 w-full">
-          {form.formState.isSubmitting ? "Submitting...":`${type} Event`}
+        <Button
+          type="submit"
+          size={"lg"}
+          disabled={form.formState.isSubmitting}
+          className="button col-span-2 w-full"
+        >
+          {form.formState.isSubmitting ? "Submitting..." : `${type} Event`}
         </Button>
       </form>
     </Form>
